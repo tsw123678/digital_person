@@ -16,7 +16,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from PySide2.QtGui import QPixmap, QImage, QDesktopServices
 from PySide2.QtMultimedia import QMediaContent, QMediaPlayer
 from PySide2.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, QProgressBar, QVBoxLayout, \
-    QWidget, QMessageBox, QHBoxLayout, QSizePolicy
+    QWidget, QMessageBox, QHBoxLayout, QSizePolicy, QDialog
 from PySide2.QtCore import QTimer, Qt, QObject, QThread, Signal, QUrl, Slot
 from PySide2.QtUiTools import QUiLoader
 from VALL.make_Audio_class import generate_and_save_audio
@@ -38,7 +38,7 @@ def getpath():
     files = os.listdir(directory_path)
     # 过滤出时间戳文件
     timestamped_files = [file for file in files if '_' in file and '.' in file]
-    # 如果没有符合条件的文件，你可以在这里处理异常情况
+    # 如果没有符合条件的文件，这里处理异常情况
     if not timestamped_files:
         print("没有找到符合条件的文件")
     else:
@@ -137,7 +137,19 @@ class Main(QMainWindow):
         os.system(
             "python ./SadTalker/inference.py --driven_audio %s --source_image %s --enhancer gfpgan --result_dir %s --size 256 --preprocess crop" % (
                 latest_audio_relative_path, image, dir))
-        self.ui.video_tip.setText("已成功合成 在右方点击按钮查看")
+        #self.ui.video_tip.setText("已成功合成 点击按钮查看")
+
+        # 展示语义解码已完成
+        dialog = QDialog()
+        dialog.resize(400, 200)
+
+        layout = QVBoxLayout()
+        label = QLabel("语义解码已完成，点击按钮可查看视频")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        dialog.setLayout(layout)
+        dialog.exec_()
 
     def playAudio(self):
         audio_directory = './temp/generateAudio'

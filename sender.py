@@ -14,7 +14,7 @@ import pygame
 import numpy as np
 from PySide2.QtGui import QPixmap, QImage, QDesktopServices
 from PySide2.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, QProgressBar, QVBoxLayout, \
-    QWidget, QMessageBox
+    QWidget, QMessageBox, QDialog
 from PySide2.QtCore import QTimer, Qt, QObject, QThread, Signal, QUrl
 from PySide2.QtUiTools import QUiLoader
 from FunASR.ASR_class import run_auto_speech_recognition
@@ -128,6 +128,21 @@ class Main(QMainWindow):
             file.write(genetxt)
 
         print(f"已保存到文件 {file_path}")
+
+        # 获取文件大小（以bit为单位）
+        file_size_bits = os.path.getsize(file_path) * 8
+
+        # 展示语义编码已完成
+        dialog = QDialog()
+        dialog.resize(400, 200)
+
+        layout = QVBoxLayout()
+        label = QLabel("语义编码已完成，编码后大小为{}bit".format(file_size_bits))
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        dialog.setLayout(layout)
+        dialog.exec_()
 
     def start_camera(self):
         empty=''
