@@ -12,6 +12,7 @@
 # @Software: PyCharm
 import glob
 import os
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from PySide2.QtGui import QPixmap, QImage, QDesktopServices
 from PySide2.QtMultimedia import QMediaContent, QMediaPlayer
@@ -70,7 +71,7 @@ class Main(QMainWindow):
 
         # 2.选择图片
         # 默认打开位置在 open_image 内修改
-        #self.ui.select_image_button.clicked.connect(self.open_image)
+        # self.ui.select_image_button.clicked.connect(self.open_image)
 
         # 5.文本转音频
         # 默认保存位置在 geneAudio/playAudio 内修改
@@ -97,6 +98,22 @@ class Main(QMainWindow):
         self.vw.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
 
         self.player = None
+
+        # 监测
+        self.monitor_folder = "\\\\192.168.137.19\\share"  # 设置要监测的文件夹路径
+        # self.monitor_folder = "D:\project_test"  # 设置要监测的文件夹路径
+        self.target_file_name = "flag_decoder.txt"  # 设置目标文件名
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.check_folder)
+        self.timer.start(2000)  # 设置定时器
+        self.alert_shown = False
+
+    def check_folder(self):
+        if not self.alert_shown and self.target_file_name in os.listdir(self.monitor_folder):
+            QMessageBox.information(self, 'OK', '信道解码已完成！')
+            full_path = os.path.join(self.monitor_folder, self.target_file_name)
+            os.remove(full_path)
+            self.alert_shown = True
 
     def playVideo(self):
         try:
@@ -137,7 +154,7 @@ class Main(QMainWindow):
         os.system(
             "python ./SadTalker/inference.py --driven_audio %s --source_image %s --enhancer gfpgan --result_dir %s --size 256 --preprocess crop" % (
                 latest_audio_relative_path, image, dir))
-        #self.ui.video_tip.setText("已成功合成 点击按钮查看")
+        # self.ui.video_tip.setText("已成功合成 点击按钮查看")
 
         # 展示语义解码已完成
         dialog = QDialog()
@@ -173,22 +190,21 @@ class Main(QMainWindow):
         self.media_player.play()
 
     def geneAudio(self):
-        # directory_path = "\\\\192.168.137.19\\share\\rec"
-        # txt_files = os.listdir(directory_path)
-        #
-        # # 从文件名中提取时间戳并找到最新的txt文件
-        # latest_txt_file = None
-        # latest_timestamp = 0
-        #
-        # txt_files = [f for f in os.listdir(directory_path) if f.endswith('_output.txt')]
-        # txt_files.sort(key=lambda x: os.path.getmtime(os.path.join(directory_path, x)), reverse=True)
-        # newest_txt_file = txt_files[0]
-        #
-        # latest_txt_file=os.path.join(directory_path, newest_txt_file)
+        directory_path = "\\\\192.168.137.19\\share\\rec"
+        txt_files = os.listdir(directory_path)
 
+        # 从文件名中提取时间戳并找到最新的txt文件
+        latest_txt_file = None
+        latest_timestamp = 0
+
+        txt_files = [f for f in os.listdir(directory_path) if f.endswith('_output.txt')]
+        txt_files.sort(key=lambda x: os.path.getmtime(os.path.join(directory_path, x)), reverse=True)
+        newest_txt_file = txt_files[0]
+
+        latest_txt_file=os.path.join(directory_path, newest_txt_file)
 
         # test
-        latest_txt_file='./temp/generateTXT/txt/text_20231013120736.txt'
+        # latest_txt_file = './temp/generateTXT/txt/test.txt'
 
         if latest_txt_file:
             with open(latest_txt_file, "r", encoding="gbk") as file:

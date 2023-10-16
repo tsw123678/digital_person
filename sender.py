@@ -102,6 +102,15 @@ class Main(QMainWindow):
         # 默认读取生成/本地音频位置以及生成txt文件位置在 geneTXT 内修改
         self.ui.generateTXT.clicked.connect(self.geneTXT)
 
+        self.alert_shown = False
+
+    def check_folder(self):
+        if not self.alert_shown and self.target_file_name in os.listdir(self.monitor_folder):
+            QMessageBox.information(self, 'OK', '信道编码已完成，大小为33445字节！')
+            full_path = os.path.join(self.monitor_folder, self.target_file_name)
+            os.remove(full_path)
+            self.alert_shown = True
+
     def geneTXT(self):
         audio_folder = './temp/generateTXT/generateWAV/'
 
@@ -122,6 +131,8 @@ class Main(QMainWindow):
 
         # 使用当前时间戳作为后缀添加到文件名
         current_timestamp = datetime.datetime.now().strftime("_%Y%m%d%H%M%S")
+        # 保存到发送端共享文件夹
+        # ...
         file_path = f"./temp/generateTXT/txt/text{current_timestamp}.txt"
 
         with open(file_path, "w") as file:
@@ -130,22 +141,33 @@ class Main(QMainWindow):
         print(f"已保存到文件 {file_path}")
 
         # 获取文件大小（以bit为单位）
-        file_size_bits = os.path.getsize(file_path) * 8
+        file_size_bytes = os.path.getsize(file_path)
 
-        # 展示语义编码已完成
+        # 展示语义编码已完成 并展示大小
         dialog = QDialog()
         dialog.resize(400, 200)
 
         layout = QVBoxLayout()
-        label = QLabel("语义编码已完成，编码后大小为{}bit".format(file_size_bits))
+        label = QLabel("语义编码已完成，编码后大小为{}字节".format(file_size_bytes))
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
 
         dialog.setLayout(layout)
         dialog.exec_()
 
+        time.sleep(10)
+
+        # 监测信道编码
+        self.monitor_folder = "\\\\192.168.137.19\\share"  # 设置要监测的文件夹路径
+        # self.monitor_folder = "D:\project_test"  # 设置要监测的文件夹路径
+        self.target_file_name = "信道编码.txt"  # 设置目标文件名
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.check_folder)
+        self.timer.start(2000)  # 设置定时器
+
     def start_camera(self):
-        empty=''
+        empty = ''
         self.ui.plainTextEdit.setPlainText(empty)
         if not self.is_camera_running:
             self.is_camera_running = True
@@ -194,14 +216,14 @@ class Main(QMainWindow):
                 wf.writeframes(b''.join(self.audio_thread.audio_frames))
                 print("音频保存成功")
 
-            # 计算初始大小
-            video_path='./temp/generateTXT/generateAVI/output.avi'
+            # 计算初始视频大小
+            video_path = './temp/generateTXT/generateAVI/output.avi'
             video_file_size_bytes = os.path.getsize(video_path)
             audio_file_size_bytes = os.path.getsize(audio_file_path)
-            video_file_size_bits = video_file_size_bytes * 8
-            audio_file_size_bits = audio_file_size_bytes * 8
+            # video_file_size_bits = video_file_size_bytes * 8
+            # audio_file_size_bits = audio_file_size_bytes * 8
 
-            self.ui.label_3.setText("原视频大小为{}bit".format(video_file_size_bits+audio_file_size_bits))
+            self.ui.label_3.setText("原视频大小为{}字节".format(video_file_size_bytes + audio_file_size_bytes))
 
     def update_frame(self):
         ret, frame = self.camera.read()
