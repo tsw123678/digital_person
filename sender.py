@@ -10,7 +10,6 @@ import sys
 import wave
 import cv2
 import pyaudio
-import pygame
 import numpy as np
 from PySide2.QtGui import QPixmap, QImage, QDesktopServices
 from PySide2.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, QProgressBar, QVBoxLayout, \
@@ -32,8 +31,7 @@ def qimage_to_ndarray(qimage):
     return arr
 
 
-# 音频线程
-# 非蓝牙耳机channels视情况修改
+# 音频线程 非蓝牙耳机channels视情况修改
 class AudioThread(QThread):
     def __init__(self, parent=None):
         super(AudioThread, self).__init__(parent)
@@ -58,6 +56,7 @@ class AudioThread(QThread):
             self.audio_frames.append(audio_data)
 
 
+# 主窗口
 class Main(QMainWindow):
 
     def __init__(self, ui_file, default_video_dir='./temp/final_output'):
@@ -69,25 +68,15 @@ class Main(QMainWindow):
         self.ui = loader.load(ui_file)
         self.setCentralWidget(self.ui)
 
-        # 1.本地音频
-        # 默认打开位置在 open_audio 内修改
-        # 请将文件重命名为最新的 output_时间戳 14位.wav 便于后续使用
-        self.ui.openAudio_button.clicked.connect(self.open_audio)
-        self.ui.play_pause_button.clicked.connect(self.play_pause_audio)
-
-        self.mp3_file = ""
-        self.audio_playing = False
-
         # 3.打开摄像头录制 保存音频
         # 默认保存位置在 start_camera/stop_camera 内同时修改
         self.ui.start_button.clicked.connect(self.start_camera)
         self.ui.stop_button.clicked.connect(self.stop_camera)
 
-        # 初始化摄像头
         self.camera = cv2.VideoCapture(0)
-        self.camera.set(3, 320)  # 设置宽度
-        self.camera.set(4, 240)  # 设置高度
-        self.camera.set(5, 10)  # 设置帧率
+        self.camera.set(3, 320)
+        self.camera.set(4, 240)
+        self.camera.set(5, 10)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
@@ -95,76 +84,61 @@ class Main(QMainWindow):
         self.is_camera_running = False
         self.video_writer = None
 
-        # 创建音频处理线程
         self.audio_thread = AudioThread()
-
-        # 4.音频转文本
-        # 默认读取生成/本地音频位置以及生成txt文件位置在 geneTXT 内修改
-        self.ui.generateTXT.clicked.connect(self.geneTXT)
-
         self.alert_shown = False
-
-    def check_folder(self):
-        if not self.alert_shown and self.target_file_name in os.listdir(self.monitor_folder):
-            QMessageBox.information(self, 'OK', '信道编码已完成，大小为33445字节！')
-            full_path = os.path.join(self.monitor_folder, self.target_file_name)
-            os.remove(full_path)
-            self.alert_shown = True
 
     def geneTXT(self):
         audio_folder = './temp/generateTXT/generateWAV/'
 
-        # 获取音频文件夹内所有音频文件的列表
         audio_files = glob.glob(os.path.join(audio_folder, 'output_*.wav'))
 
-        # 检查是否有音频文件
         if not audio_files:
             print("没有找到音频文件")
             return
 
-        # 根据时间戳排序，选择最新的音频文件
         audio_files.sort(key=lambda x: os.path.getctime(x), reverse=True)
         latest_audio_file = audio_files[0]
 
         genetxt = run_auto_speech_recognition(latest_audio_file)
         self.ui.plainTextEdit.setPlainText(genetxt)
 
-        # 使用当前时间戳作为后缀添加到文件名
         current_timestamp = datetime.datetime.now().strftime("_%Y%m%d%H%M%S")
         # 保存到发送端共享文件夹
-        # ...
-        file_path = f"./temp/generateTXT/txt/text{current_timestamp}.txt"
+        # file_path = f"./temp/generateTXT/txt/text_{current_timestamp}.txt"
+        file_path = f"./temp/generateTXT/txt/text_{current_timestamp}.txt"
 
         with open(file_path, "w") as file:
             file.write(genetxt)
 
         print(f"已保存到文件 {file_path}")
 
-        # 获取文件大小（以bit为单位）
+        # 展示txt大小
         file_size_bytes = os.path.getsize(file_path)
-
-        # 展示语义编码已完成 并展示大小
-        dialog = QDialog()
-        dialog.resize(400, 200)
-
-        layout = QVBoxLayout()
-        label = QLabel("语义编码已完成，编码后大小为{}字节".format(file_size_bytes))
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-
-        dialog.setLayout(layout)
-        dialog.exec_()
+        # 提示信息已发送
+        self.ui.label_process.setText("语义提取已完成，大小为{}字节,压缩比例为{:.2f}%".format(file_size_bytes,100*(file_size_bytes/self.audio_size)))
 
         time.sleep(10)
 
-        # 监测信道编码
-        self.monitor_folder = "\\\\192.168.137.19\\share"  # 设置要监测的文件夹路径
-        # self.monitor_folder = "D:\project_test"  # 设置要监测的文件夹路径
-        self.target_file_name = "信道编码.txt"  # 设置目标文件名
+        # 监测语义编码、信道编码
+        # 设置要监测的文件夹路径
+        # self.monitor_folder = "\\\\192.168.137.19\\share"
+        self.monitor_folder = "D:\project_test"
+        self.target_files = {"语义编码.txt": self.handle_semantic, "信道编码.txt": self.handle_channel}
+        self.detected_files = set()
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.check_folder)
-        self.timer.start(2000)  # 设置定时器
+        self.timer.start(2000)
+
+    def check_folder(self):
+        for target_file, handler in self.target_files.items():
+            if target_file in os.listdir(self.monitor_folder) and target_file not in self.detected_files:
+                handler()
+                self.detected_files.add(target_file)
+                if len(self.detected_files) == len(self.target_files):
+                    self.timer.stop()
+                else:
+                    self.detected_files.clear()
 
     def start_camera(self):
         empty = ''
@@ -177,7 +151,6 @@ class Main(QMainWindow):
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             self.video_writer = cv2.VideoWriter("./temp/generateTXT/generateAVI/output.avi", fourcc, 20.0, (640, 480))
 
-            # 启动音频处理线程
             self.audio_thread.start()
 
         else:
@@ -195,13 +168,11 @@ class Main(QMainWindow):
             self.audio_thread.requestInterruption()
             self.audio_thread.wait()
 
-            # 获取当前时间戳
             current_timestamp = datetime.datetime.now().strftime("_%Y%m%d%H%M%S")
 
             # 音频文件路径
             audio_file_path = f'./temp/generateTXT/generateWAV/output_{current_timestamp}.wav'
 
-            # 检查是否已存在音频文件，如果存在则删除它
             if os.path.exists(audio_file_path):
                 try:
                     os.remove(audio_file_path)
@@ -216,14 +187,24 @@ class Main(QMainWindow):
                 wf.writeframes(b''.join(self.audio_thread.audio_frames))
                 print("音频保存成功")
 
-            # 计算初始视频大小
-            video_path = './temp/generateTXT/generateAVI/output.avi'
-            video_file_size_bytes = os.path.getsize(video_path)
+            # 计算初始视频大小 字节
             audio_file_size_bytes = os.path.getsize(audio_file_path)
-            # video_file_size_bits = video_file_size_bytes * 8
-            # audio_file_size_bits = audio_file_size_bytes * 8
+            self.audio_size=int(audio_file_size_bytes)
+            self.ui.video_size.setText("原音频大小为{}字节".format(audio_file_size_bytes))
 
-            self.ui.label_3.setText("原视频大小为{}字节".format(video_file_size_bytes + audio_file_size_bytes))
+            self.geneTXT()
+
+    def handle_semantic(self):
+        print("语义编码已完成，大小为aaa字节")
+        self.ui.label_process.setText("语义编码已完成")
+        full_path = os.path.join(self.monitor_folder, "语义编码.txt")
+        os.remove(full_path)
+
+    def handle_channel(self):
+        print("信道编码已完成，大小为bbb字节")
+        self.ui.label_process.setText("信道编码已完成")
+        full_path = os.path.join(self.monitor_folder, "信道编码.txt")
+        os.remove(full_path)
 
     def update_frame(self):
         ret, frame = self.camera.read()
@@ -233,57 +214,10 @@ class Main(QMainWindow):
             bytes_per_line = ch * w
             convert_to_qt_format = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
 
-            # 获取Label的大小
-            label_width = self.ui.label_2.width()
-            label_height = self.ui.label_2.height()
-            # 按比例缩放视频帧以适应Label的大小
+            label_width = self.ui.record_video.width()
+            label_height = self.ui.record_video.height()
             scaled_image = convert_to_qt_format.scaled(label_width, label_height, Qt.KeepAspectRatio)
-            # 设置Label的Pixmap
-            self.ui.label_2.setPixmap(QPixmap.fromImage(scaled_image))
-
-    def closeEvent(self, event):
-        self.stop_camera()
-
-    def open_audio(self):
-        audio = QFileDialog().getOpenFileName(self, '选择音频文件',
-                                              './temp/generateTXT/generateWAV',
-                                              '*.wav')
-
-        audio_path = audio[0]
-        self.mp3_file = audio_path
-
-        if self.mp3_file:
-            pygame.mixer.init()
-            pygame.mixer.music.load(self.mp3_file)
-
-            self.ui.play_pause_button.setEnabled(True)
-
-    def play_pause_audio(self):
-        if not self.audio_playing:
-            pygame.mixer.music.play()
-
-            self.ui.play_pause_button.setText("暂停音频")
-            self.audio_playing = True
-        else:
-            if pygame.mixer.music.get_busy():
-                pygame.mixer.music.pause()
-                self.ui.play_pause_button.setText("继续播放")
-            else:
-                pygame.mixer.music.unpause()
-                self.ui.play_pause_button.setText("暂停音频")
-
-    def open_image(self):
-        options = QFileDialog.Options()
-        image_path, _ = QFileDialog.getOpenFileName(self, "选择图片文件",
-                                                    "./temp/img",
-                                                    "图像文件 (*.jpg *.jpeg *.png *.bmp *.gif);;所有文件 (*)",
-                                                    options=options)
-
-        if image_path:
-            pixmap = QPixmap(image_path)
-            self.ui.image_label.setPixmap(pixmap)
-            self.ui.image_label.setScaledContents(True)
-            self.ui.image_path_label.setText(f"图片路径：{image_path}")
+            self.ui.record_video.setPixmap(QPixmap.fromImage(scaled_image))
 
 
 if __name__ == "__main__":
