@@ -104,8 +104,8 @@ class Main(QMainWindow):
 
         current_timestamp = datetime.datetime.now().strftime("_%Y%m%d%H%M%S")
         # 保存到发送端共享文件夹
-        # file_path = f"./temp/generateTXT/txt/text_{current_timestamp}.txt"
-        file_path = f"./temp/generateTXT/txt/text_{current_timestamp}.txt"
+        # file_path = f"./temp/generateTXT/txt/text{current_timestamp}.txt"
+        file_path = f"./temp/generateTXT/txt/text{current_timestamp}.txt"
 
         with open(file_path, "w") as file:
             file.write(genetxt)
