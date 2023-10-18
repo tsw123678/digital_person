@@ -103,7 +103,7 @@ class Main(QMainWindow):
         self.ui.plainTextEdit.setPlainText(genetxt)
 
         current_timestamp = datetime.datetime.now().strftime("_%Y%m%d%H%M%S")
-        # 保存到发送端共享文件夹
+        # 保存文本到发送端共享文件夹
         # file_path = f"./temp/generateTXT/txt/text{current_timestamp}.txt"
         file_path = f"./temp/generateTXT/txt/text{current_timestamp}.txt"
 
@@ -114,10 +114,11 @@ class Main(QMainWindow):
 
         # 展示txt大小
         file_size_bytes = os.path.getsize(file_path)
+        self.txt_size = file_size_bytes
         # 提示信息已发送
-        self.ui.label_process.setText("语义提取已完成，大小为{}字节,压缩比例为{:.2f}%".format(file_size_bytes,100*(file_size_bytes/self.audio_size)))
+        self.ui.label_process.setText("语义提取已完成，大小为{}字节".format(file_size_bytes))
 
-        time.sleep(10)
+        time.sleep(5)
 
         # 监测语义编码、信道编码
         # 设置要监测的文件夹路径
@@ -189,7 +190,7 @@ class Main(QMainWindow):
 
             # 计算初始视频大小 字节
             audio_file_size_bytes = os.path.getsize(audio_file_path)
-            self.audio_size=int(audio_file_size_bytes)
+            self.audio_size = int(audio_file_size_bytes)
             self.ui.video_size.setText("原音频大小为{}字节".format(audio_file_size_bytes))
 
             self.geneTXT()
@@ -202,7 +203,7 @@ class Main(QMainWindow):
 
     def handle_channel(self):
         print("信道编码已完成，大小为bbb字节")
-        self.ui.label_process.setText("信道编码已完成")
+        self.ui.label_process.setText("信道编码已完成，压缩率为{:.2f}%".format(100 * (32 / self.txt_size)))
         full_path = os.path.join(self.monitor_folder, "信道编码.txt")
         os.remove(full_path)
 

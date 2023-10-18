@@ -4,15 +4,12 @@
 # @Author:tsw
 # @File：receiver.py
 # @Software: PyCharm
-# -*- coding: utf-8 -*-
-# @Date: 2023/9/20
-# @Time: 10:09
-# @Author: tsw
-# @File: main_show.py
-# @Software: PyCharm
 import glob
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+from OpenGL.GL import glColor, glBegin
+from OpenGL.raw.GL.VERSION.GL_1_0 import glClear, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glLoadIdentity, GL_QUADS, \
+    glVertex3f, glEnd
 from PySide2.QtMultimedia import QMediaContent, QMediaPlayer
 from PySide2.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, QProgressBar, QVBoxLayout, \
     QWidget, QMessageBox, QHBoxLayout, QSizePolicy, QDialog
@@ -23,6 +20,7 @@ import time
 from OpenGL.GLUT import *
 from PySide2.QtMultimediaWidgets import QVideoWidget
 from utils.toAVI import convert_mp4_to_avi
+import openai
 
 
 def getpath():
@@ -151,7 +149,7 @@ class Main(QMainWindow):
         dir = './temp/final_output'
 
         os.system(
-            "python ./SadTalker/inference.py --driven_audio %s --source_image %s --enhancer gfpgan --result_dir %s --size 256 --preprocess crop" % (
+            "python ./SadTalker/inference.py --driven_audio %s --source_image %s --enhancer gfpgan --result_dir %s --size 256 --preprocess crop --pose_style 2 --expression_scale 2" % (
                 latest_audio_relative_path, image, dir))
 
     def geneAudio(self):
@@ -169,11 +167,30 @@ class Main(QMainWindow):
         # latest_txt_file = os.path.join(directory_path, newest_txt_file)
 
         # 本地test
-        latest_txt_file = './temp/generateTXT/txt/test.txt'
+        latest_txt_file = './temp/generateTXT/txt/text_20231017200243.txt'
 
         if latest_txt_file:
             with open(latest_txt_file, "r", encoding="gbk") as file:
                 content = file.read()
+
+            # gpt精简
+            openai.api_base = "https://api.closeai-proxy.xyz/v1"
+            openai.api_key = "sk-HAG8bxQJ8pLF4W6UTZUjz679G6Hqf4FKqGPFvUYRDKpOe4Bb"
+
+            os.environ["HTTP_PROXY"] = "127.0.0.1:33210"
+            os.environ["HTTPS_PROXY"] = "127.0.0.1:33210"
+
+            q = "精简以下这句话但是不要改变语义：{}".format(content)
+
+            rsp = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "user", "content": q}
+                ]
+            )
+
+            content = rsp['choices'][0]['message']['content']
+            print("已完成精简，精简后内容为{}".format(content))
 
             timestamp = time.strftime("%Y%m%d%H%M%S")
             audio_filename = f'./temp/generateAudio/regeneAudio_{timestamp}.wav'
