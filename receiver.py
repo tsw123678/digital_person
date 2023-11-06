@@ -7,13 +7,10 @@
 import glob
 import os
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-from OpenGL.GL import glColor, glBegin
-from OpenGL.raw.GL.VERSION.GL_1_0 import glClear, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, glLoadIdentity, GL_QUADS, \
-    glVertex3f, glEnd
 from PySide2.QtMultimedia import QMediaContent, QMediaPlayer
-from PySide2.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, QProgressBar, QVBoxLayout, \
-    QWidget, QMessageBox, QHBoxLayout, QSizePolicy, QDialog
-from PySide2.QtCore import QTimer, Qt, QObject, QThread, Signal, QUrl, Slot
+from PySide2.QtWidgets import QApplication, QMainWindow, QVBoxLayout, \
+    QSizePolicy
+from PySide2.QtCore import QTimer, QUrl, QCoreApplication
 from PySide2.QtUiTools import QUiLoader
 from VALL.make_Audio_class import generate_and_save_audio
 import time
@@ -21,6 +18,7 @@ from OpenGL.GLUT import *
 from PySide2.QtMultimediaWidgets import QVideoWidget
 from utils.toAVI import convert_mp4_to_avi
 import openai
+from PySide2.QtGui import QPixmap
 
 
 def getpath():
@@ -28,26 +26,18 @@ def getpath():
     target_dir = './temp/final_output'
     convert_mp4_to_avi(source_dir, target_dir, delete_original=True)
 
-    # 目标目录路径
     global latest_file_path
     directory_path = './temp/final_output'
-    # 获取目录中所有文件
     files = os.listdir(directory_path)
-    # 过滤出时间戳文件
     timestamped_files = [file for file in files if '_' in file and '.' in file]
-    # 如果没有符合条件的文件，这里处理异常情况
     if not timestamped_files:
         print("没有找到符合条件的文件")
     else:
-        # 根据文件名中的时间戳来排序文件
         sorted_files = sorted(timestamped_files, key=lambda x: os.path.getmtime(os.path.join(directory_path, x)),
                               reverse=True)
-        # 获取最新的文件名
         latest_file_name = sorted_files[0]
-        # 获取最新文件的完整相对路径
         latest_file_path = os.path.join(directory_path, latest_file_name)
         latest_file_path = latest_file_path.replace("\\", "/")
-        # print("最新的文件是:", latest_file_name)
         print("最新文件的完整相对路径是:", latest_file_path)
 
     return latest_file_path
@@ -56,17 +46,16 @@ def getpath():
 # 主窗口
 class Main(QMainWindow):
 
-    def __init__(self, ui_file, default_video_dir='./temp/final_output'):
+    def __init__(self, ui_file):
         super().__init__()
 
-        self.setWindowTitle("digital person : receiver")
+        self.setWindowTitle("Digital Person : Receiver")
 
         loader = QUiLoader()
         self.ui = loader.load(ui_file)
         self.setCentralWidget(self.ui)
 
         # 7.播放视频
-        self.ui.play_video.clicked.connect(self.playVideo)
         self.openGLWidget = self.ui.openGLWidget
 
         layout = QVBoxLayout()
@@ -89,15 +78,61 @@ class Main(QMainWindow):
         self.timer.timeout.connect(self.check_folder)
         self.timer.start(2000)
 
+        self.ui.text.setWordWrap(True)
+
+    def load_img_voice(self):
+        image_path = './temp/img/voice.png'
+        pixmap = QPixmap(image_path)
+
+        label_width = self.ui.voice.width()
+        label_height = self.ui.voice.height()
+
+        pixmap = pixmap.scaledToWidth(label_width)
+        pixmap = pixmap.scaledToHeight(label_height)
+
+        self.ui.voice.setPixmap(pixmap)
+
     def handle_semantic(self):
         print("语义解码已完成")
-        self.ui.state.setText("语义解码已完成，请接收数据")
         full_path = os.path.join(self.monitor_folder, "语义解码.txt")
         os.remove(full_path)
 
+        time.sleep(1)
+        self.ui.state.setText("Semantic decode is completed.")
+        QCoreApplication.processEvents()
+
+        # 显示原图片
+        self.load_img()
+        QCoreApplication.processEvents()
+
+        # 音色图片
+        self.load_img_voice()
+        QCoreApplication.processEvents()
+
+        # 生成音频
+        start_time = time.time()
+        self.geneAudio()
+        QCoreApplication.processEvents()
+
+        # 合成视频
+        self.make_final_video()
+        end_time = time.time()
+        self.rebuild_time = "{:.2f}".format(end_time - start_time)
+        QCoreApplication.processEvents()
+
+        # 显示信息
+        text = f"\nDuration\n\nDecoding：3.12s\n\nRebuild：{self.rebuild_time}s"
+        self.ui.info.setText(text)
+        QCoreApplication.processEvents()
+
+        self.ui.state.setText("Video rebuild is completed.Autoplay immediately!")
+        time.sleep(1)
+        QCoreApplication.processEvents()
+        self.playVideo()
+
     def handle_channel(self):
         print("信道解码已完成")
-        self.ui.state.setText("信道解码已完成")
+        self.ui.state.setText("Channel decode is completed.")
         full_path = os.path.join(self.monitor_folder, "信道解码.txt")
         os.remove(full_path)
 
@@ -111,14 +146,19 @@ class Main(QMainWindow):
                 else:
                     self.detected_files.clear()
 
-    def playVideo(self):
-        # 生成音频
-        self.geneAudio()
-        # 合成视频
-        self.make_final_video()
+    def load_img(self):
+        image_path = './temp/img/tsw.png'
+        pixmap = QPixmap(image_path)
 
-        self.ui.complete.setText("视频已成功还原，即将自动播放")
-        time.sleep(3)
+        label_width = self.ui.img.width()
+        label_height = self.ui.img.height()
+
+        pixmap = pixmap.scaledToWidth(label_width)
+        pixmap = pixmap.scaledToHeight(label_height)
+
+        self.ui.img.setPixmap(pixmap)
+
+    def playVideo(self):
 
         # 播放
         try:
@@ -133,6 +173,8 @@ class Main(QMainWindow):
             print("发生错误：", str(e))
 
     def make_final_video(self):
+        self.ui.state.setText("Video is currently being reconstructed!Please wait.")
+        QCoreApplication.processEvents()
         audio_directory = './temp/generateAudio'
         pattern = os.path.join(audio_directory, 'regeneAudio_*.wav')
         audio_files = glob.glob(pattern)
@@ -145,7 +187,7 @@ class Main(QMainWindow):
         else:
             print("未找到音频文件")
 
-        image = './temp/img/person.png'
+        image = './temp/img/tsw.png'
         dir = './temp/final_output'
 
         os.system(
@@ -167,7 +209,7 @@ class Main(QMainWindow):
         # latest_txt_file = os.path.join(directory_path, newest_txt_file)
 
         # 本地test
-        latest_txt_file = './temp/generateTXT/txt/text_20231017200243.txt'
+        latest_txt_file = './temp/generateTXT/txt/text_20231105195928.txt'
 
         if latest_txt_file:
             with open(latest_txt_file, "r", encoding="gbk") as file:
@@ -180,7 +222,7 @@ class Main(QMainWindow):
             os.environ["HTTP_PROXY"] = "127.0.0.1:33210"
             os.environ["HTTPS_PROXY"] = "127.0.0.1:33210"
 
-            q = "精简以下这句话但是不要改变语义：{}".format(content)
+            q = "用更少的词精简下面这句话但不要改变语义：{}".format(content)
 
             rsp = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
@@ -195,11 +237,14 @@ class Main(QMainWindow):
             timestamp = time.strftime("%Y%m%d%H%M%S")
             audio_filename = f'./temp/generateAudio/regeneAudio_{timestamp}.wav'
 
+            self.ui.text.setText(content)
+            QCoreApplication.processEvents()
             generate_and_save_audio(content, audio_filename)
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     player = Main("./UI/receiver.ui")
+    player.resize(1181, 674)
     player.show()
     sys.exit(app.exec_())

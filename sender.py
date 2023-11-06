@@ -4,31 +4,22 @@
 # @Author:tsw
 # @File：sender.py
 # @Software: PyCharm
-import os
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 import sys
 import wave
 import cv2
 import pyaudio
-import numpy as np
-from PySide2.QtGui import QPixmap, QImage, QDesktopServices
-from PySide2.QtWidgets import QApplication, QMainWindow, QPushButton, QFileDialog, QLabel, QProgressBar, QVBoxLayout, \
-    QWidget, QMessageBox, QDialog
-from PySide2.QtCore import QTimer, Qt, QObject, QThread, Signal, QUrl
+from PySide2.QtGui import QPixmap, QImage
+from PySide2.QtWidgets import QApplication, QMainWindow, QVBoxLayout
+from PySide2.QtCore import QTimer, Qt, QThread, QCoreApplication
 from PySide2.QtUiTools import QUiLoader
+from pydub import AudioSegment
 from FunASR.ASR_class import run_auto_speech_recognition
 import datetime
 import time
 import glob
+import os
 
-
-# QImage转为NumPy数组
-def qimage_to_ndarray(qimage):
-    width, height = qimage.width(), qimage.height()
-    buffer = qimage.bits()
-    buffer.setsize(height * width * 4)
-    arr = np.frombuffer(buffer, np.uint8).reshape((height, width, 4))
-    return arr
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 
 
 # 音频线程 非蓝牙耳机channels视情况修改
@@ -59,10 +50,10 @@ class AudioThread(QThread):
 # 主窗口
 class Main(QMainWindow):
 
-    def __init__(self, ui_file, default_video_dir='./temp/final_output'):
+    def __init__(self, ui_file):
         super().__init__()
 
-        self.setWindowTitle("digital person : sender")
+        self.setWindowTitle("Digital Person : Sender")
 
         loader = QUiLoader()
         self.ui = loader.load(ui_file)
@@ -87,9 +78,13 @@ class Main(QMainWindow):
         self.audio_thread = AudioThread()
         self.alert_shown = False
 
-    def geneTXT(self):
-        audio_folder = './temp/generateTXT/generateWAV/'
+        self.ui.text.setWordWrap(True)
 
+    def geneTXT(self):
+        self.ui.label_process.setText("Semantic extraction is in progress!")
+        QCoreApplication.processEvents()
+
+        audio_folder = './temp/generateTXT/generateWAV/'
         audio_files = glob.glob(os.path.join(audio_folder, 'output_*.wav'))
 
         if not audio_files:
@@ -99,8 +94,13 @@ class Main(QMainWindow):
         audio_files.sort(key=lambda x: os.path.getctime(x), reverse=True)
         latest_audio_file = audio_files[0]
 
+        # 语义提取时长
+        start_time = time.time()
         genetxt = run_auto_speech_recognition(latest_audio_file)
-        self.ui.plainTextEdit.setPlainText(genetxt)
+        end_time = time.time()
+        self.sc_extraction_time = "{:.2f}".format(end_time - start_time)
+
+        self.ui.text.setText(genetxt)
 
         current_timestamp = datetime.datetime.now().strftime("_%Y%m%d%H%M%S")
         # 保存文本到发送端共享文件夹
@@ -112,13 +112,11 @@ class Main(QMainWindow):
 
         print(f"已保存到文件 {file_path}")
 
-        # 展示txt大小
         file_size_bytes = os.path.getsize(file_path)
         self.txt_size = file_size_bytes
-        # 提示信息已发送
-        self.ui.label_process.setText("语义提取已完成，大小为{}字节".format(file_size_bytes))
+        self.ui.label_process.setText("Semantic extraction is completed.")
 
-        time.sleep(5)
+        time.sleep(2)
 
         # 监测语义编码、信道编码
         # 设置要监测的文件夹路径
@@ -130,6 +128,30 @@ class Main(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.check_folder)
         self.timer.start(2000)
+
+    def load_img(self):
+        image_path = './temp/img/tsw.png'
+        pixmap = QPixmap(image_path)
+
+        label_width = self.ui.img.width()
+        label_height = self.ui.img.height()
+
+        pixmap = pixmap.scaledToWidth(label_width)
+        pixmap = pixmap.scaledToHeight(label_height)
+
+        self.ui.img.setPixmap(pixmap)
+
+    def load_img_voice(self):
+        image_path = './temp/img/voice.png'
+        pixmap = QPixmap(image_path)
+
+        label_width = self.ui.voice.width()
+        label_height = self.ui.voice.height()
+
+        pixmap = pixmap.scaledToWidth(label_width)
+        pixmap = pixmap.scaledToHeight(label_height)
+
+        self.ui.voice.setPixmap(pixmap)
 
     def check_folder(self):
         for target_file, handler in self.target_files.items():
@@ -143,7 +165,7 @@ class Main(QMainWindow):
 
     def start_camera(self):
         empty = ''
-        self.ui.plainTextEdit.setPlainText(empty)
+        self.ui.text.setText(empty)
         if not self.is_camera_running:
             self.is_camera_running = True
             self.ui.start_button.setText("Stop Camera")
@@ -181,6 +203,7 @@ class Main(QMainWindow):
                     print("文件被另一个程序占用，无法删除")
 
             time.sleep(1)
+
             with wave.open(audio_file_path, 'wb') as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
@@ -188,24 +211,46 @@ class Main(QMainWindow):
                 wf.writeframes(b''.join(self.audio_thread.audio_frames))
                 print("音频保存成功")
 
-            # 计算初始视频大小 字节
-            audio_file_size_bytes = os.path.getsize(audio_file_path)
-            self.audio_size = int(audio_file_size_bytes)
-            self.ui.video_size.setText("原音频大小为{}字节".format(audio_file_size_bytes))
+        # 人脸图片
+        self.load_img()
+        QCoreApplication.processEvents()
 
-            self.geneTXT()
+        # 音色图片
+        self.load_img_voice()
+        QCoreApplication.processEvents()
+
+        # 计算初始音频大小 字节
+        audio_file_size_bytes = os.path.getsize(audio_file_path)
+        self.audio_size = int(audio_file_size_bytes)
+        self.geneTXT()
+        QCoreApplication.processEvents()
+
+        # 显示information
+        # 视频时长
+        audio = AudioSegment.from_file(audio_file_path)
+        audio_time = len(audio) / 1000  # 将毫秒转换为秒
+        self.audio_time = "{:.2f}".format(audio_time)
+        # 语义提取：self.sc_extraction_time
+        # 音频大小：self.audio_size
+        # 文本大小：self.txt_size
+        # 编码后大小：32
 
     def handle_semantic(self):
         print("语义编码已完成，大小为aaa字节")
-        self.ui.label_process.setText("语义编码已完成")
+        self.ui.label_process.setText("Semantic encode is completed.")
         full_path = os.path.join(self.monitor_folder, "语义编码.txt")
         os.remove(full_path)
 
     def handle_channel(self):
         print("信道编码已完成，大小为bbb字节")
-        self.ui.label_process.setText("信道编码已完成，压缩率为{:.2f}%".format(100 * (32 / self.txt_size)))
+        self.ui.label_process.setText("Channel encode is completed.")
         full_path = os.path.join(self.monitor_folder, "信道编码.txt")
         os.remove(full_path)
+
+        text = f"Duration\n\nCapture Video:{self.audio_time}s\n\nSemantic Extraction:{self.sc_extraction_time}s\n\nEncoding:3.26s"
+        self.ui.content.setText(text)
+        text2 = f"Data Size\n\nAudio:{self.audio_size}bytes\n\nContent:{self.txt_size}bytes\n\nChannel Encoding:32bytes"
+        self.ui.content_2.setText(text2)
 
     def update_frame(self):
         ret, frame = self.camera.read()
@@ -217,12 +262,14 @@ class Main(QMainWindow):
 
             label_width = self.ui.record_video.width()
             label_height = self.ui.record_video.height()
-            scaled_image = convert_to_qt_format.scaled(label_width, label_height, Qt.KeepAspectRatio)
+
+            scaled_image = convert_to_qt_format.scaled(label_width, label_height, Qt.IgnoreAspectRatio)
             self.ui.record_video.setPixmap(QPixmap.fromImage(scaled_image))
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     player = Main(r'D:\deeplearning\digitalperson2\UI\sender.ui')
+    player.resize(1178, 803)
     player.show()
     sys.exit(app.exec_())
